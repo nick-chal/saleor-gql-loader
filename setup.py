@@ -10,7 +10,8 @@ setup(
     url='https://github.com/grll/saleor-gql-loader',
     download_url='https://github.com/grll/saleor-gql-loader/archive/0.0.4.tar.gz',
     keywords=['graphql', 'saleor', 'loader'],
-    install_requires=['requests', 'Django', 'requests-toolbelt'],
+    install_requires=['requests', 'Django',
+                      'requests-toolbelt', "python-dotenv"],
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Developers',

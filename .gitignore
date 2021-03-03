@@ -4,3 +4,5 @@ __pycache__
 dist
 MANIFEST
 .vscode
+.env
+*.egg-info/*

@@ -745,7 +745,8 @@ class ETLDataLoader:
             }
         """
 
-        response = graphql_request(query, variables, self.headers, self.endpoint_url)
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
 
         errors = response["data"]["customerCreate"]["accountErrors"]
         handle_errors(errors)
@@ -784,12 +785,74 @@ class ETLDataLoader:
                     }
                 """
 
-        response = graphql_request(query, variables, self.headers, self.endpoint_url)
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
 
         if (
-            len(response["data"]["updatePrivateMetadata"]["item"]["privateMetadata"])
+            len(response["data"]["updatePrivateMetadata"]
+                ["item"]["privateMetadata"])
             > 0
         ):
             return item_id
         else:
             return None
+
+    def make_product_available(self, productId):
+        query = """
+        mutation ProductSetAvailabilityForPurchase($isAvailable: Boolean!, $productId: ID!, $startDate: Date) {
+            productSetAvailabilityForPurchase(isAvailable: $isAvailable, productId: $productId, startDate: $startDate) {
+                product {
+                    id
+                    availableForPurchase
+                    isAvailableForPurchase
+                }
+                productErrors {
+                    field
+                    message
+                    code
+                }
+            }
+        }
+        """
+
+        variables = {
+            "productId": productId,
+            "isAvailable": True,
+            "startDate": "2021-02-02"
+        }
+
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
+
+        errors = response["data"]["productSetAvailabilityForPurchase"]["productErrors"]
+        handle_errors(errors)
+
+        return response["data"]["productSetAvailabilityForPurchase"]["product"]["id"]
+
+    def add_product_metadata(self, productId, metadata):
+        query = """
+        
+        fragment MetadataErrorFragment on MetadataError {
+            code
+            field
+        }
+
+        mutation UpdateMetadata($id: ID!, $input: [MetadataInput!]!) {
+            updateMetadata(id: $id, input: $input) {
+                errors: metadataErrors {
+                ...MetadataErrorFragment
+                }
+            }
+        }
+            """
+
+        variables = {
+            "id": productId,
+            "input": metadata,
+        }
+
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
+
+        errors = response["data"]["updateMetadata"]["errors"]
+        handle_errors(errors)
