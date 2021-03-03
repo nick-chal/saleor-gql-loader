@@ -6,3 +6,4 @@ MANIFEST
 .vscode
 .env
 *.egg-info/*
+algolia-dump.json

@@ -100,4 +100,4 @@ def add_product_details(product):
 
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-    executor.map(add_product_details, data[11:20])
+    executor.map(add_product_details, data)
