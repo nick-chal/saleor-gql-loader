@@ -10,6 +10,7 @@ requires a lot of dev better redo the project as a django app inside saleor
 project for easier testing.
 
 """
+from datetime import datetime
 from .utils import graphql_request, graphql_multipart_request, override_dict, handle_errors, get_payload
 
 
@@ -225,6 +226,70 @@ class ETLDataLoader:
 
         return response["data"]["shopAddressUpdate"]["shop"]["companyAddress"]
 
+    def create_channel(self, **kwargs):
+        """Create a default channel for v3.
+        """
+        default_kwargs = {
+            "currencyCode": "USD",
+            "name": "default-channel",
+            "slug": "default-channel"
+        }
+
+        override_dict(default_kwargs, kwargs)
+
+        variables = {
+            "input": default_kwargs
+        }
+
+        query = """
+            mutation ChannelCreate($input: ChannelCreateInput!) {
+                channelCreate(input: $input) {
+                    channel {
+                        id
+                    }
+                    errors: channelErrors {
+                        code
+                        field
+                        message
+                    }
+                }
+                }
+        """
+
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
+
+        errors = response["data"]["channelCreate"]["errors"]
+        handle_errors(errors)
+
+        return response["data"]["channelCreate"]["channel"]["id"]
+
+    def activate_channel(self, channel_id):
+        """Activate the channel so that it appears in the storefront
+        """
+        query = """
+            mutation ChannelActivate($id: ID!) {
+                channelActivate(id: $id) {
+                    channel {
+                        id
+                    }
+                    errors: channelErrors {
+                        code
+                        field
+                        message
+                    }
+                }
+                }
+        """
+
+        response = graphql_request(
+            query, {"id": channel_id}, self.headers, self.endpoint_url)
+
+        errors = response["data"]["channelActivate"]["errors"]
+        handle_errors(errors)
+
+        return response["data"]["channelActivate"]["channel"]["id"]
+
     def create_warehouse(self, **kwargs):
         """create a warehouse.
 
@@ -364,7 +429,8 @@ class ETLDataLoader:
         """
         default_kwargs = {
             "inputType": "DROPDOWN",
-            "name": "default"
+            "name": "default",
+            "type": "PRODUCT_TYPE"
         }
 
         override_dict(default_kwargs, kwargs)
@@ -374,12 +440,12 @@ class ETLDataLoader:
         }
 
         query = """
-            mutation createAttribute($input: AttributeCreateInput!) {
+            mutation AttributeCreate($input: AttributeCreateInput!) {
                 attributeCreate(input: $input) {
                     attribute {
                         id
                     }
-                    productErrors {
+                    attributeErrors {
                         field
                         message
                         code
@@ -391,7 +457,7 @@ class ETLDataLoader:
         response = graphql_request(
             query, variables, self.headers, self.endpoint_url)
 
-        errors = response["data"]["attributeCreate"]["productErrors"]
+        errors = response["data"]["attributeCreate"]["attributeErrors"]
         handle_errors(errors)
 
         return response["data"]["attributeCreate"]["attribute"]["id"]
@@ -586,10 +652,7 @@ class ETLDataLoader:
         """
         default_kwargs = {
             "name": "default",
-            "description": "default",
             "productType": product_type_id,
-            "basePrice": 0.0,
-            "sku": "default"
         }
 
         override_dict(default_kwargs, kwargs)
@@ -621,7 +684,50 @@ class ETLDataLoader:
 
         return response["data"]["productCreate"]["product"]["id"]
 
-    def create_product_variant(self, product_id, **kwargs):
+    def update_product_listing(self, product_id, channel_id, **kwargs):
+        """Update the product listing and add to a channel and publish it
+        """
+        formatted_date = datetime.strftime(datetime.now(), "%Y-%m-%d")
+
+        default_kwargs = {"addChannels": [{"availableForPurchaseDate": formatted_date, "channelId": channel_id,
+                                           "isAvailableForPurchase": True, "isPublished": True, "publicationDate": formatted_date, "visibleInListings": True}]}
+
+        override_dict(default_kwargs, kwargs)
+
+        variables = {
+            "id": product_id,
+            "input": default_kwargs
+        }
+
+        query = """
+            fragment ProductChannelListingErrorFragment on ProductChannelListingError {
+                code
+                field
+                message
+                channels
+                }
+
+            mutation ProductChannelListingUpdate($id: ID!, $input: ProductChannelListingUpdateInput!) {
+                productChannelListingUpdate(id: $id, input: $input) {
+                    product {
+                        id
+                    }
+                    errors: productChannelListingErrors {
+                        ...ProductChannelListingErrorFragment
+                    }
+                }
+            }
+        """
+
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
+
+        errors = response["data"]["productChannelListingUpdate"]["errors"]
+        handle_errors(errors)
+
+        return response["data"]["productChannelListingUpdate"]["product"]["id"]
+
+    def create_product_variant(self, product_id,   **kwargs):
         """create a product variant.
 
         Parameters
@@ -646,11 +752,14 @@ class ETLDataLoader:
         default_kwargs = {
             "product": product_id,
             "sku": "0",
-            "attributes": []
+            "attributes": [],
+            "stocks": [],
+            "trackInventory": False,
         }
 
         override_dict(default_kwargs, kwargs)
 
+        print(default_kwargs)
         variables = {
             "input": default_kwargs
         }
@@ -677,6 +786,49 @@ class ETLDataLoader:
         handle_errors(errors)
 
         return response["data"]["productVariantCreate"]["productVariant"]["id"]
+
+    def update_product_variant_listing(self, variant_id, channel_id, **kwargs):
+        """Update the variant of the product and make it available in a channel
+        """
+        default_kwargs = {
+            "channelId": channel_id,
+            "price": "10"
+        }
+
+        override_dict(default_kwargs, kwargs)
+
+        variables = {
+            "id": variant_id,
+            "input": [default_kwargs]
+        }
+
+        query = """
+            fragment ProductChannelListingErrorFragment on ProductChannelListingError {
+                code
+                field
+                message
+                channels
+                __typename
+                }
+            mutation ProductVariantChannelListingUpdate($id: ID!, $input: [ProductVariantChannelListingAddInput!]!) {
+                productVariantChannelListingUpdate(id: $id, input: $input) {
+                    variant {
+                        id
+                    }
+                    errors: productChannelListingErrors {
+                        ...ProductChannelListingErrorFragment
+                    }
+                }
+            }
+        """
+
+        response = graphql_request(
+            query, variables, self.headers, self.endpoint_url)
+
+        errors = response["data"]["productVariantChannelListingUpdate"]["errors"]
+        handle_errors(errors)
+
+        return response["data"]["productVariantChannelListingUpdate"]["variant"]["id"]
 
     def create_product_image(self, product_id, file_path):
         """create a product image.
