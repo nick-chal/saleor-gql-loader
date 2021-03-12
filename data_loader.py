@@ -87,9 +87,7 @@ def add_product_details(sku_variants):
 
         etl_data_loader.update_product_listing(product_id, channel_id)
         for variant in sku_variants:
-            if not variant.get("image"):
-                continue
-            if not product.get("image"):
+            if not product.get("image") and variant.get("image"):
                 product['image'] = variant['image']
 
             if not variant.get("price"):
