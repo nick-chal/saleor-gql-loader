@@ -87,7 +87,8 @@ def graphql_multipart_request(body, headers, endpoint=GQL_DEFAULT_ENDPOINT):
     }
     override_dict(base_headers, headers)
 
-    response = requests.post(endpoint, data=bodyEncoder, headers=base_headers, timeout=90)
+    response = requests.post(endpoint, data=bodyEncoder,
+                             headers=base_headers, timeout=90)
 
     parsed_response = json.loads(response.text)
     if response.status_code != 200:
@@ -142,6 +143,7 @@ def handle_errors(errors):
             "{field} : {message}".format(**error) for error in errors]
         raise Exception("\n".join(txt_list))
 
+
 def get_operations(product_id):
     """Get ProductImageCreate operations
 
@@ -174,6 +176,7 @@ def get_operations(product_id):
         "alt": ''
     }
     return {"query": query, "variables": variables}
+
 
 def get_payload(product_id, file_path):
     """Get ProductImageCreate operations

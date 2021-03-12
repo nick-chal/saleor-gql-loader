@@ -253,7 +253,7 @@ class ETLDataLoader:
                         message
                     }
                 }
-                }
+            }
         """
 
         response = graphql_request(
@@ -759,7 +759,7 @@ class ETLDataLoader:
 
         override_dict(default_kwargs, kwargs)
 
-        print(default_kwargs)
+
         variables = {
             "input": default_kwargs
         }

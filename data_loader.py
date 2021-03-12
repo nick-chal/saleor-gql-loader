@@ -37,7 +37,7 @@ unit_size_attribute_id = etl_data_loader.create_attribute(
 print("Basic mandatory attributes added.")
 
 attribute_keys = [
-    {"key": "vendor", "key_id": vendor_attribute_id},
+    # {"key": "vendor", "key_id": vendor_attribute_id},
     {"key": "brand", "key_id": brand_attribute_id},
     {"key": "size", "key_id": size_attribute_id},
     {"key": "unit_size", "key_id": unit_size_attribute_id},
@@ -45,19 +45,28 @@ attribute_keys = [
 
 product_type_id = etl_data_loader.create_product_type(
     name="Product",
-    hasVariants=False,
-    productAttributes=[vendor_attribute_id, brand_attribute_id,
+    hasVariants=True,
+    productAttributes=[brand_attribute_id,
                        size_attribute_id, unit_size_attribute_id],
+    variantAttributes=[vendor_attribute_id]
 )
 print("Created Base product type")
 
 category_id = etl_data_loader.create_category(name="Category")
-metadata_keys = ["id", "by_weight", "tags", "department"]
+metadata_keys = ["by_weight", "department"]
 print("Base category added")
 
+result = {}
 
-def add_product_details(product):
-    metadata = [{"key": "original_url", "value": product["url"]}]
+for product in data:
+    if product.get('vendor') in [pro['vendor'] for pro in result.get(product.get("sku"), [])]:
+        continue
+    result[product.get("sku")] = [*result.get(product.get("sku"), []), product]
+
+
+def add_product_details(sku_variants):
+    product = sku_variants[0]
+    metadata = []
     for key in metadata_keys:
         if product.get(key) is None:
             continue
@@ -71,25 +80,32 @@ def add_product_details(product):
             {"id": key["key_id"], "values": [str(product.get(key["key"]))]})
 
     try:
-        product_id = etl_data_loader.create_product(
-            product_type_id,
-            name=product["name"],
-            description=json.dumps(
-                {"blocks": [{"type": "paragraph", "data": {"text": product["description"]}}]}),
-
-            category=category_id,
-            attributes=attributes,
-        )
-
-        variant_id = etl_data_loader.create_product_variant(
-            product_id, sku=product["sku"])
-        etl_data_loader.update_product_listing(product_id, channel_id)
-        etl_data_loader.update_product_variant_listing(
-            variant_id, channel_id, price=product["price"])
-
-        # etl_data_loader.make_product_available(product_id)
+        product_id = etl_data_loader.create_product(product_type_id, name=product["name"], description=json.dumps(
+            {"blocks": [{"type": "paragraph", "data": {"text": product["description"]}}]}), category=category_id, attributes=attributes)
         etl_data_loader.add_product_metadata(
             product_id, metadata)
+
+        etl_data_loader.update_product_listing(product_id, channel_id)
+        for variant in sku_variants:
+            if not variant.get("image"):
+                continue
+            if not product.get("image"):
+                product['image'] = variant['image']
+
+            if not variant.get("price"):
+                continue
+
+            variant['price'] = round(float(variant.get('price')), 2)
+
+            variant_meta_data = [{"key": "original_url", "value": variant["url"]}, {
+                "key": "original_id", "value": variant["id"]}, {"key": "tags", "value": variant.get("tags", "null")}, ]
+
+            variant_id = etl_data_loader.create_product_variant(
+                product_id, sku=f"{variant['sku']}-{variant['vendor']}", attributes=[{"id": vendor_attribute_id, "values": variant.get("vendor")}], )
+            etl_data_loader.update_product_variant_listing(
+                variant_id, channel_id, price=variant["price"])
+            etl_data_loader.add_product_metadata(variant_id, variant_meta_data)
+        # etl_data_loader.make_product_available(product_id)
 
         url = product["image"]
         response = requests.get(url)
@@ -101,13 +117,14 @@ def add_product_details(product):
 
         print(
             f"SUCCESS Added product:  id: {product['id']} Name: {product['name']}")
-    except Exception as e:
+    except Exception:
         print(
             f"ERROR adding product:  id: {product['id']} Name: {product['name']}")
 
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
-    executor.map(add_product_details, data)
+    executor.map(add_product_details, list(result.values()))
+
 
 etl_data_loader.activate_channel(channel_id)
 print("Channel Activated!")
